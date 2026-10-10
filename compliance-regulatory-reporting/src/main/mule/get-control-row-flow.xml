@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="8c922f51-e72b-48c0-a030-3a487f985048" file="config-dev.yaml" />
+	<configuration-properties doc:name="Configuration properties" doc:id="512e9f96-ea30-4567-ad81-16619e1b2708" file="config-local.yaml" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="0f46b8b7-4d1f-4803-a1aa-7e05aa8df8ad" >
+		<db:generic-connection url="jdbc:postgresql://${db.host}:${db.port}/${db.name}?sslmode=require" driverClassName="org.postgresql.Driver" user="${db.user}" password="${db.password}" />
+	</db:config>
+	<flow name="get-control-row-flow" doc:id="3a335917-4b16-4be3-a07f-e3ea1d9fceae" >
+		<http:listener doc:name="Listener" doc:id="015b0e71-f166-43ce-a82d-580d4bb78bd4" config-ref="compliance-report-exp-api-httpListenerConfig" path="/control/{reportType}" allowedMethods="GET"/>
+		<db:select doc:name="Select" doc:id="ef49a226-713b-4113-8add-bba16bcae765" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT report_type, entity_code, last_reported_upto, last_sequence_number
+FROM compliance_report_control
+WHERE report_type = :reportType]]></db:sql>
+			<db:input-parameters ><![CDATA[#[reportType: attributes.uriParams.reportType]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="08d759f0-6222-4322-a9c3-2b958ba299fe" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

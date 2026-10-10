@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_89c1c91f_03c2_4d4c_ae38_890b752fff09_Input_Attributes = {| uriParams: {| runId: String |} |}
+

@@ -1,0 +1,22 @@
+%dw 2.0
+
+type auto_89c1c91f_03c2_4d4c_ae38_890b752fff09_Output_Payload = {|
+  entity_code?: String, 
+  errorCode?: String, 
+  failure_reason?: String, 
+  file_checksum?: String, 
+  is_nil_report?: Boolean, 
+  is_revision?: Boolean, 
+  message?: String, 
+  notification_status?: String, 
+  period_end?: String, 
+  period_start?: String, 
+  record_count?: Number, 
+  report_type?: String, 
+  run_id?: String, 
+  run_status?: String, 
+  sequence_number?: Number, 
+  total_amount?: Number, 
+  triggered_by?: String
+|}
+

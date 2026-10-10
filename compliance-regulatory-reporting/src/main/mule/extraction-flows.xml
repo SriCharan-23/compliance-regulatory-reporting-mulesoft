@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="get-flagged-transactions-flow" doc:id="67a9d866-c314-421d-a9b5-374ebff59e96" >
+		<http:listener doc:name="Listener" doc:id="0c6aa734-25d5-4ba8-882d-7f2c6a3bc5fb" config-ref="compliance-report-exp-api-httpListenerConfig" path="/transactions" allowedMethods="GET"/>
+		<db:select doc:name="Select" doc:id="8e0dd39b-89cd-4dbe-b8b2-24acda1ad22d" config-ref="Database_Config">
+			<db:sql ><![CDATA[   SELECT f.flag_seq, t.transaction_id, to_char(t.transaction_datetime AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS transaction_datetime, t.account_number,
+          t.customer_id, c.customer_name, c.customer_type, t.transaction_type,
+          t.channel, t.currency, t.amount, t.counterparty_name,
+          t.counterparty_country, f.flag_code, f.flag_reason, to_char(f.flagged_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS flagged_at,
+          f.reviewed_by, f.review_status
+   FROM transaction_flags f
+   JOIN transactions t ON t.transaction_id = f.transaction_id
+   LEFT JOIN customers c ON c.customer_id = t.customer_id
+   WHERE f.flagged_at >= CAST(CAST(:periodStart AS text) AS timestamptz)
+     AND f.flagged_at <  CAST(CAST(:periodEnd AS text) AS timestamptz)
+     AND f.report_status = :reportStatus
+   ORDER BY f.flagged_at, t.transaction_id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+  periodStart: attributes.queryParams.periodStart,
+  periodEnd: attributes.queryParams.periodEnd,
+  reportStatus: attributes.queryParams.status default "PENDING_REPORT"
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="f5e50e29-82ea-4916-a4e1-a11ebdc1ce3b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-transaction-summary-flow" doc:id="5c34d024-a384-4828-a08d-55b097b991be" >
+		<http:listener doc:name="Listener" doc:id="0b2b9cf3-17b9-420c-8b42-fcce445916f4" config-ref="compliance-report-exp-api-httpListenerConfig" path="/transactions/summary" allowedMethods="GET"/>
+		<db:select doc:name="Select" doc:id="26a2e502-bfeb-4609-9e3e-0e374e8ce1fb" config-ref="Database_Config">
+			<db:sql ><![CDATA[   SELECT COUNT(*) AS record_count,
+          COALESCE(SUM(t.amount), 0) AS total_amount,
+          COUNT(DISTINCT t.customer_id) AS customer_count
+   FROM transaction_flags f
+   JOIN transactions t ON t.transaction_id = f.transaction_id
+   WHERE f.flagged_at >= CAST(CAST(:periodStart AS text) AS timestamptz)
+     AND f.flagged_at <  CAST(CAST(:periodEnd AS text) AS timestamptz)
+     AND f.report_status = :reportStatus]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+     periodStart: attributes.queryParams.periodStart,
+     periodEnd: attributes.queryParams.periodEnd,
+     reportStatus: attributes.queryParams.status default "PENDING_REPORT"
+   }]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="b7d0eb02-6125-41cc-ad8a-3fcb4f8b6a1f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

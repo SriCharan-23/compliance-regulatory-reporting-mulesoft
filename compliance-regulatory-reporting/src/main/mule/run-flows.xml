@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="claim-run-flow" doc:id="06e7d496-e370-497d-833c-70ac56999b02" >
+		<http:listener doc:name="Listener" doc:id="b70df665-f53e-40a7-be7e-2d850ab9063d" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/claim" allowedMethods="POST"/>
+		<db:select doc:name="Select" doc:id="5a095f1c-1cdf-4401-9c85-cbcfd12f1bee" config-ref="Database_Config">
+			<db:sql ><![CDATA[WITH ins AS (
+  INSERT INTO compliance_report_runs
+    (run_id, report_type, entity_code, period_start, period_end, sequence_number,
+     is_revision, record_count, total_amount, completeness_ok, triggered_by,
+     run_status, started_at, correlation_id)
+  SELECT :runId, :reportType, :entityCode,
+         CAST(CAST(:periodStart AS text) AS timestamptz),
+         CAST(CAST(:periodEnd AS text) AS timestamptz),
+         s.seq, s.seq > 1, 0, 0, false, :triggeredBy, 'CLAIMED', now(), :correlationId
+  FROM (SELECT COALESCE(MAX(sequence_number), 0) + 1 AS seq
+        FROM compliance_report_runs
+        WHERE report_type = :reportType
+          AND entity_code = :entityCode
+          AND period_start = CAST(CAST(:periodStart AS text) AS timestamptz)) s
+  RETURNING run_id, sequence_number, is_revision
+)
+SELECT run_id, sequence_number, is_revision FROM ins]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+     runId: "RUN-" ++ upper((uuid() replace "-" with "")[0 to 15]),
+     reportType: payload.reportType,
+     entityCode: payload.entityCode,
+     periodStart: payload.periodStart,
+     periodEnd: payload.periodEnd,
+     triggeredBy: payload.triggeredBy,
+     correlationId: correlationId
+   }]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="f5cb21f5-084f-4a6c-9deb-488fc2409fba" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="finalize-run-flow" doc:id="5f105273-1173-4cbc-a7a4-b10cf227c65a" >
+		<http:listener doc:name="Listener" doc:id="ebceb0a9-ff33-4984-b3ce-d34398aca000" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/finalize" allowedMethods="POST"/>
+		<db:select doc:name="Select" doc:id="f85bf9d3-3003-4107-ac14-b1a139f12d4a" config-ref="Database_Config">
+			<db:sql ><![CDATA[  WITH upd_flags AS (
+    UPDATE transaction_flags
+    SET report_status = 'REPORTED', reported_run_id = :runId
+    WHERE flagged_at >= CAST(CAST(:periodStart AS text) AS timestamptz)
+      AND flagged_at <  CAST(CAST(:periodEnd AS text) AS timestamptz)
+      AND report_status = 'PENDING_REPORT'
+    RETURNING 1
+  ),
+  upd_run AS (
+    UPDATE compliance_report_runs
+    SET run_status = 'COMPLETED', record_count = :recordCount,
+        total_amount = :totalAmount, customer_count = :customerCount,
+        completeness_ok = true, is_nil_report = :isNil,
+        output_file_path = :outputPath, archive_file_path = :archivePath,
+        file_checksum = :checksum, completed_at = now()
+    WHERE run_id = :runId
+    RETURNING 1
+  ),
+  upd_ctl AS (
+    UPDATE compliance_report_control
+    SET last_reported_upto = GREATEST(last_reported_upto, CAST(CAST(:periodEnd AS text) AS timestamptz)),
+        last_successful_run = :runId, last_sequence_number = :sequenceNumber,
+        updated_at = now()
+    WHERE report_type = :reportType
+    RETURNING 1
+  )
+  SELECT (SELECT count(*) FROM upd_flags) AS flags_updated,
+         (SELECT count(*) FROM upd_run)   AS run_updated,
+         (SELECT count(*) FROM upd_ctl)   AS control_updated]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+    runId: payload.runId,
+    reportType: payload.reportType,
+    periodStart: payload.periodStart,
+    periodEnd: payload.periodEnd,
+    sequenceNumber: payload.sequenceNumber as Number,
+    recordCount: payload.recordCount as Number,
+    totalAmount: payload.totalAmount as Number,
+    customerCount: payload.customerCount as Number,
+    isNil: payload.isNil as Boolean,
+    outputPath: payload.outputPath,
+    archivePath: payload.archivePath,
+    checksum: payload.checksum
+  }]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="357608f3-9fee-491e-9ad9-321170ad0ff1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="fail-run-flow" doc:id="5c9b6e81-9f66-4949-b04f-26177a36a799" >
+		<http:listener doc:name="Listener" doc:id="e83312f6-524f-484d-b299-a96a2f6c6e56" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/fail" allowedMethods="POST"/>
+		<db:update doc:name="Update" doc:id="bb49caa8-a298-4287-a28e-b3d23f1f8f88" config-ref="Database_Config">
+			<db:sql ><![CDATA[UPDATE compliance_report_runs
+SET run_status     = 'FAILED',
+    failure_reason = :failureReason,
+    completed_at   = now()
+WHERE run_id = :runId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+  runId: payload.runId,
+  failureReason: payload.failureReason
+}]]]></db:input-parameters>
+		</db:update>
+		<ee:transform doc:name="Transform Message" doc:id="63cbf083-b3a2-4e16-8dc4-8f09e4490f3d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{ updated: payload.affectedRows > 0 }]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="update-notification-status-flow" doc:id="6837b634-10b8-4996-b096-780379ab8c42" >
+		<http:listener doc:name="Listener" doc:id="6fef07b8-6a66-4103-b008-c3f8d7203d7e" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/notification-status" allowedMethods="POST"/>
+		<db:update doc:name="Update" doc:id="714c8155-6b92-4b2a-990e-852ca011580a" config-ref="Database_Config">
+			<db:sql ><![CDATA[UPDATE compliance_report_runs
+SET notification_status = :notificationStatus
+WHERE run_id = :runId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{ runId: payload.runId, notificationStatus: payload.status }]]]></db:input-parameters>
+		</db:update>
+		<ee:transform doc:name="Transform Message" doc:id="4f406a18-f0a6-44d9-8052-aaaefe45c5a6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{ updated: payload.affectedRows > 0 }]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-run-flow" doc:id="89c1c91f-03c2-4d4c-ae38-890b752fff09" >
+		<http:listener doc:name="Listener" doc:id="ae245409-cbfa-4ba1-a790-4d6019f587a8" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/{runId}" allowedMethods="GET" responseStreamingMode="NEVER">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+		</http:listener>
+		<db:select doc:name="Select" doc:id="07528674-d156-4714-857a-59bbaf7a0665" config-ref="Database_Config">
+			<db:sql ><![CDATA[  SELECT run_id, report_type, entity_code,
+         to_char(period_start AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS period_start,
+         to_char(period_end AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS period_end,
+         sequence_number, is_revision, is_nil_report, record_count, total_amount,
+         file_checksum, notification_status, run_status, triggered_by, failure_reason
+  FROM compliance_report_runs
+  WHERE run_id = :runId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{ runId: attributes.uriParams.runId }]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="1d697d90-5a14-473a-8da4-0b7236c3d581" >
+    <when expression="#[isEmpty(payload)]">
+        <set-variable value="#[404]" doc:name="Set Variable" doc:id="10c135a9-11d9-49cb-886f-007f891b60a8" variableName="httpStatus"/>
+        <ee:transform doc:name="Transform Message" doc:id="4d61fde8-1a7d-4d6d-a912-a9e3fa8a25be" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{ errorCode: "APP:RUN_NOT_FOUND", message: "No run found for the given runId" }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </when>
+    <otherwise >
+        <ee:transform doc:name="Transform Message" doc:id="f2a8edc1-de27-4e79-9262-1b5eb1df71d3" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </otherwise>
+</choice>
+	</flow>
+	<flow name="list-runs-flow" doc:id="9e1cc2fb-beba-4b6a-ac0c-1ee35451d949" >
+		<http:listener doc:name="Listener" doc:id="158bccc9-2e7b-4868-892f-e5aae7ff53b7" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs" allowedMethods="GET" responseStreamingMode="NEVER"/>
+		<db:select doc:name="Select" doc:id="da13a4bf-9664-45eb-a38f-e2f4fb58d261" config-ref="Database_Config">
+			<db:sql ><![CDATA[  SELECT run_id, report_type, entity_code,
+         to_char(period_start AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS period_start,
+         to_char(period_end AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS period_end,
+         sequence_number, is_revision, is_nil_report, record_count, total_amount,
+         file_checksum, notification_status, run_status, triggered_by
+  FROM compliance_report_runs
+  WHERE (:status = 'ALL' OR run_status = :status)
+  ORDER BY started_at DESC
+  LIMIT :limit]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+    status: attributes.queryParams.status default "ALL",
+    limit: (attributes.queryParams.limit default "20") as Number
+  }]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="4f810c2d-995c-41e7-8546-e5c651381920" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

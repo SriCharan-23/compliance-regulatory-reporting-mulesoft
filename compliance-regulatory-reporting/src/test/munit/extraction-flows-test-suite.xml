@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="extraction-flows-test-suite.xml" />
+	<munit:test name="get-flagged-transactions-happy-path" doc:id="3a5e0972-0955-4d3c-9c52-738fd788f07a" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="6d71af7b-4ec9-486f-bd7f-6dafe7dd4a95" >
+				<munit:payload value='#[{&#10;  queryParams: {&#10;    periodStart: "2026-09-10T16:00:00Z",&#10;    periodEnd: "2026-09-11T16:00:00Z"&#10;  }&#10;}]' />
+				<munit:variables >
+					<munit:variable key="periodStart" value='"2026-09-11T00:00:00Z"' />
+					<munit:variable key="periodEnd" value='"2026-09-11T23:59:59Z"' />
+				</munit:variables>
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="4aef624a-a23e-48bd-a8b7-0767b8c28033" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="40d33232-144f-4970-a1b4-184ae51f240c" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value='#[[&#10;  {&#10;    flag_seq: 1,&#10;    transaction_id: "TXN-99120455",&#10;    amount: 248500,&#10;    flag_code: "FLG-HIGH-VALUE"&#10;  },&#10;  {&#10;    flag_seq: 2,&#10;    transaction_id: "TXN-99120781",&#10;    amount: 1150000,&#10;    flag_code: "FLG-CROSS-BORDER"&#10;  }&#10;]]' encoding="UTF-8" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to extraction-flowsFlow" doc:id="a97f08f8-1c92-4c15-902f-41b15a760282" name="get-flagged-transactions-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="26f6ad7e-bb89-4508-b811-fe6a875762da" expression="#[sizeOf(payload)]" is="#[MunitTools::equalTo(2)]"/>
+			<munit-tools:assert-that doc:name="Assert that1" doc:id="c379a27c-7617-4f43-ba62-9c203851e6b3" expression="#[payload[0].transaction_id]" is='#[MunitTools::equalTo("TXN-99120455")]' />
+		</munit:validation>
+	</munit:test>
+	<munit:test name="get-transaction-summary-happy-path" doc:id="7c031cb2-fba4-443d-9586-8e78c204fa2a" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="38466259-c4a0-4f22-8096-25742b627c46" >
+				<munit:attributes value='#[{ queryParams: { periodStart: "2026-09-10T16:00:00Z", periodEnd: "2026-09-11T16:00:00Z" } }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="5c3d83b8-8a26-43cc-9f84-7ab254ecf355" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="aa4e0523-af90-4f15-831b-1dcb2978b7ee" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value="#[[{ record_count: 3, total_amount: 2378500.00, customer_count: 3 }]]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to get-transaction-summary-flow" doc:id="a02412ec-43d5-4870-8c6f-c23942c33699" name="get-transaction-summary-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="95fe47e2-7958-4130-97cb-2a677822ce6d" expression="#[payload.record_count]" is="#[MunitTools::equalTo(3)]"/>
+		</munit:validation>
+	</munit:test>
+
+
+</mule>

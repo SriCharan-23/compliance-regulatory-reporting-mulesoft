@@ -1,0 +1,7 @@
+   http:
+     port: "8081"
+   db:
+     host: "aws-0-ap-southeast-2.pooler.supabase.com"
+     port: "5432"
+     name: "postgres"
+     user: "postgres.cvewkbcshxpjgrobdixg"

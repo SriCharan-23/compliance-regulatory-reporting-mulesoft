@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="run-flows-test-suite.xml" />
+	<munit:test name="run-flows-test-suite-claim-run-flowTest" doc:id="4aa74729-1001-406e-8aa3-41f99ff29624" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="1ecf2319-34eb-4eb2-b58d-31053484fdae" >
+				<munit:payload value='#[output application/java --- { reportType: "STR", entityCode: "ENT0091", periodStart: "2026-09-10T16:00:00Z", periodEnd: "2026-09-11T16:00:00Z", triggeredBy: "SCHEDULER" }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="531a5d3a-03c4-4f5b-893f-492674fc9605" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="5a095f1c-1cdf-4401-9c85-cbcfd12f1bee" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value='#[[{ run_id: "RUN-TEST1", sequence_number: 1, is_revision: false }]]' />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to claim-run-flow" doc:id="81268ecc-eada-4a03-9f9f-5ca6259c4526" name="claim-run-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="34f1625d-7847-4500-9be9-f1f73cd67587" expression="#[payload.sequence_number]" is="#[MunitTools::equalTo(1)]"/>
+			<munit-tools:assert-that doc:name="Assert that" doc:id="1b1ffed0-3db9-476f-93e7-e5b52e417fba" expression="#[payload.is_revision]" is="#[MunitTools::equalTo(false)]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suite-finalize-run-flowTest" doc:id="63e293c3-6516-4503-b032-db210c100542" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="20e4e4c9-f242-4e73-b642-bc73d2c17562" >
+				<munit:payload value='#[output application/java --- { runId: "RUN-TEST1", recordCount: 3, totalAmount: 2378500.00, customerCount: 3 }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="3ea0e460-39d6-42e1-9c5a-34dea8d92283" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="f85bf9d3-3003-4107-ac14-b1a139f12d4a" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value="#[[{ flags_updated: 3, run_updated: 1, control_updated: 1 }]]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to finalize-run-flow" doc:id="d6bb6a0f-32a5-423c-b567-ea96ff01e914" name="finalize-run-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="0627d12f-3afa-4b3d-88eb-7ad9878e8232" expression="#[payload.flags_updated]" is="#[MunitTools::equalTo(3)]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suite-fail-run-flowTest" doc:id="7bf4fa4c-1e03-4b80-9410-3385e8e1e094" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="1c674f63-5d78-44e1-a853-b03f7aedc298" >
+				<munit:payload value='#[output application/java --- { runId: "RUN-TEST1", failureReason: "Completeness mismatch" }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="4770b7f0-68af-430d-bcfb-28282f91c839" processor="db:update">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Update" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="bb49caa8-a298-4287-a28e-b3d23f1f8f88" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value="#[{ affectedRows: 1 }]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to fail-run-flow" doc:id="5c81d0d0-282d-43ad-a485-fbc7ad1e1ee2" name="fail-run-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="f09f9ebe-62a6-4ab6-a3ae-824c55ee892f" expression="#[payload.updated]" is="#[MunitTools::equalTo(true)]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suite-update-notification-status-flowTest" doc:id="f9f3dfc7-a46b-448b-bc2f-25508f49ff33" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="69783724-19d1-4dbc-aa30-31f1ae02659e" >
+				<munit:payload value='#[output application/java --- { runId: "RUN-TEST1", notificationStatus: "SENT" }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="d2fbadaf-7f64-4289-b4e5-16ddbda44d3a" processor="db:update">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Update" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="714c8155-6b92-4b2a-990e-852ca011580a" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value="#[{ affectedRows: 1 }]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to update-notification-status-flow" doc:id="8f23aa78-8e34-4087-8e68-b3fe323de4f5" name="update-notification-status-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="bc18a7af-0ac1-47fc-801e-8c20b4622c8e" is="#[MunitTools::equalTo(true)]" expression="#[payload.updated]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suite-get-run-flowTest" doc:id="4d0e7b1e-9b42-4f25-94d5-677840362c97" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="38ea741a-e319-4d73-b0e5-1e148227c0b1" >
+				<munit:attributes value='#[{ uriParams: { runId: "RUN-TEST1" } }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="55435dc6-6b43-4750-81f2-c85af60fa567" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="07528674-d156-4714-857a-59bbaf7a0665" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value='#[[{ run_id: "RUN-TEST1", run_status: "FAILED" }]]' />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to get-run-flow" doc:id="540409b5-846e-40a9-8f1e-9cc03a026148" name="get-run-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="06bb40b4-d470-4670-b170-873dcc4efc7f" expression="#[payload.run_id]" is='#[MunitTools::equalTo("RUN-TEST1")]'/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suiteTest" doc:id="6b6bba27-5197-4a41-86d1-0328e414c8db" >
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="6b3b0eb1-8358-4921-987b-fab31bc08fb1" >
+				<munit:attributes value='#[{ uriParams: { runId: "RUN-TEST1" } }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="62040631-b430-49ea-8dfd-96ef872049fd" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="07528674-d156-4714-857a-59bbaf7a0665" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value="#[[]]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow Reference" doc:id="33b7511d-dbb1-46ab-bf92-7683ffa1237b" name="get-run-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="d8153d31-8510-4bff-86fb-c682f9efcbce" is='#[MunitTools::equalTo("APP:RUN_NOT_FOUND")]' expression="#[payload.errorCode]"/>
+			<munit-tools:assert-that doc:name="Assert that" doc:id="8f0e7cd8-e8e0-4fe8-8471-26b062cec81c" is="#[MunitTools::equalTo(404)]" expression="#[vars.httpStatus]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="run-flows-test-suite-list-runs-flowTest" doc:id="bc10142c-9eec-4677-b1ec-042786ec45db" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="8d91b4c4-cac2-443f-ae92-6840cbaf8de4" >
+				<munit:attributes value='#[{ queryParams: { status: "ALL", limit: "20" } }]' />
+			</munit:set-event>
+			<munit-tools:mock-when doc:name="Mock when" doc:id="6be92bdf-22f7-4af0-b334-fa4cbff2c7ba" processor="db:select">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="Select" attributeName="doc:name" />
+					<munit-tools:with-attribute whereValue="da13a4bf-9664-45eb-a38f-e2f4fb58d261" attributeName="doc:id" />
+					<munit-tools:with-attribute whereValue="Database_Config" attributeName="config-ref" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:payload value='#[[{ run_id: "RUN-TEST1" }, { run_id: "RUN-TEST2" }]]' />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to list-runs-flow" doc:id="79938d81-e016-4927-a8e2-cafdab50b16b" name="list-runs-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="3467cb16-cd65-40fe-bc51-ec9f63a926d8" is="#[MunitTools::equalTo(2)]" expression="#[sizeOf(payload)]"/>
+		</munit:validation>
+	</munit:test>
+
+
+</mule>
