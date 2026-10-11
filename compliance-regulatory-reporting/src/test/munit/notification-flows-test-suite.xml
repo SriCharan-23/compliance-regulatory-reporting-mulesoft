@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="notification-flows-test-suite.xml" />
+	<munit:test name="notification-flows-test-suite-build-email-body-flowTest" doc:id="3cdcc889-7271-44e5-8584-ddba3398320b" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="8426492f-b881-453f-bcf2-c3bb691f4707" >
+				<munit:variables >
+					<munit:variable key="emailCtx" value='#[output application/java --- { runId: "RUN-TEST1", reportType: "REGULATORY_REPORT", runStatus: "COMPLETED", entityCode: "ABCBANK", periodDate: "2026-09-11", sequenceNumber: 1, isRevision: false, recordCount: 3, totalAmount: 2378500.00, customerCount: 3, isNil: false, fileName: "ABCBANK_REGULATORY_REPORT_20260911_001.csv", checksum: "abc123", archivePath: "C:/compliance-reports/archive/x.csv", flagBreakdown: [{ flag_code: "HIGH_VALUE", count: 3 }] }]' />
+				</munit:variables>
+			</munit:set-event>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to build-email-body-flow" doc:id="2f56f292-defd-4ed4-9584-e7b45a68b4b0" name="build-email-body-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="fe73bb92-e7f2-4ffc-85ff-09fcbb7265ec" is='#[MunitTools::equalTo("REGULATORY_REPORT COMPLETED - ABCBANK 2026-09-11")]' expression="#[payload.subject]"/>
+			<munit-tools:assert-that doc:name="Assert that" doc:id="b7b37150-61ac-475e-a377-de42b8e9fc02" is='#[MunitTools::containsString("Records: 3")]' expression="#[payload.body]"/>
+			<munit-tools:assert-that doc:name="Assert that" doc:id="ea35cbe1-bc10-4d17-ba6a-a4486e4fe36e" is='#[MunitTools::containsString("SHA-256: abc123")]' expression="#[payload.body]"/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="notification-flows-test-suite-send-report-email-flowTest" doc:id="0f2867ba-ce97-4604-952a-62560069fbcd" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="a15d6130-af2e-4b55-9063-4ffa50fb32f3" >
+				<munit:variables >
+					<munit:variable key="emailSubject" value='#["Test email from Mule"]' />
+					<munit:variable key="emailBody" value='#["Hello from the compliance report app"]' />
+					<munit:variable key="submissionBytes" value="#[1000]" />
+					<munit:variable key="fileNames" value='#[["test.csv", "test-summary.txt"]]' />
+				</munit:variables>
+			</munit:set-event>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to send-report-email-flow" doc:id="b3e8cf30-2628-428d-a967-9dbc387955ae" name="send-report-email-flow"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

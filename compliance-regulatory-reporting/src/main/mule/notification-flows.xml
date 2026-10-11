@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+ <email:smtp-config name="Email_SMTP" doc:name="Email SMTP" doc:id="244c5014-860e-4f4b-a745-7569fd0c456c" >
+	<email:smtps-connection host="smtp.gmail.com" port="465" user="${email.user}" password="${email.password}" >
+		<tls:context >
+			<tls:trust-store insecure="true" />
+		</tls:context>
+	</email:smtps-connection>
+</email:smtp-config>
+	<flow name="send-report-email-flow" doc:id="e496b750-67f1-4d80-913f-4e33a790c752" >
+		<choice doc:name="Choice" doc:id="2b064968-8657-4a90-8a89-6b589c8aa7d7" >
+			<when expression="#[(vars.submissionBytes default 0) &gt; (p('email.maxAttachmentBytes') as Number)]">
+				<set-variable value="SECURE_LINK" doc:name="Set Variable" doc:id="15f81381-e51f-436f-90c0-55fcb2a3b5be" variableName="deliveryMethod"/>
+				<set-variable value="#[(vars.emailBody default &quot;&quot;) ++ &quot;\n\nThe file exceeds the attachment limit. Please download it from the secure link: &quot; ++ p('report.outputDir') ++ &quot;/&quot; ++ (vars.fileNames[0] default &quot;&quot;)]" doc:name="Set Variable" doc:id="17b1a0dc-11f2-477b-a47b-08cb6d34d78a" variableName="emailBody"/>
+				<until-successful maxRetries="3" doc:name="Until Successful" doc:id="a89ebe57-534d-446e-a7d9-f27431f23de3" millisBetweenRetries="2000">
+					<email:send doc:name="Send" doc:id="18494a98-ac3e-4a1d-9219-7cd2172aa31a" config-ref="Email_SMTP" fromAddress="#[p('email.user')]" subject="#[vars.emailSubject]" toAddresses="#[(p('compliance.distributionList') splitBy &quot;,&quot;) map trim($)]">
+					<email:body>
+						<email:content><![CDATA[#[vars.emailBody]]]></email:content>
+					</email:body>
+				</email:send>
+				</until-successful>
+			</when>
+			<otherwise >
+				<set-variable value="ATTACHMENT" doc:name="Set Variable" doc:id="f24b9bec-4ad9-435d-94d1-3229673dacd1" variableName="deliveryMethod"/>
+				<file:read doc:name="Read" doc:id="0c59f780-4569-4893-8271-7925b92c5b56" path="#[p('report.outputDir') ++ '/' ++ (vars.fileNames[0] default &quot;&quot;)]" config-ref="File_Config" target="submissionContent">
+					<ee:repeatable-file-store-stream bufferUnit="MB" />
+				</file:read>
+				<file:read doc:name="Read" doc:id="277a38db-ccf4-41d1-95a1-937c17d1d8c8" path="#[p('report.outputDir') ++ '/' ++ (vars.fileNames[1] default &quot;&quot;)]" target="summaryContent" config-ref="File_Config">
+					<ee:repeatable-file-store-stream bufferUnit="MB" />
+				</file:read>
+				<until-successful maxRetries="3" doc:name="Until Successful" doc:id="a715b58d-61bb-4114-8b25-4055c6bcdd4d" millisBetweenRetries="2000">
+					<email:send doc:name="Send" doc:id="3b7f9641-ac38-41bf-8bec-4c21df30ad6a" config-ref="Email_SMTP" toAddresses="#[(p('compliance.distributionList') splitBy &quot;,&quot;) map trim($)]" subject="#[vars.emailSubject]" fromAddress="#[p('email.user')]">
+					<email:body>
+						<email:content><![CDATA[#[vars.emailBody]]]></email:content>
+					</email:body>
+					<email:attachments><![CDATA[#[{ (vars.fileNames[0] default ""): vars.submissionContent, (vars.fileNames[1] default ""): vars.summaryContent }]]]></email:attachments>
+				</email:send>
+				</until-successful>
+			</otherwise>
+		</choice>
+		<set-payload value="#[output application/json --- { method: vars.deliveryMethod }]" doc:name="Set Payload" doc:id="336b2c57-1bab-4f84-98cb-c0e76740712a" />
+	</flow>
+	<flow name="build-email-body-flow" doc:id="fa9ac023-2f70-4497-ad00-53a3c145581a" >
+		<ee:transform doc:name="Transform Message" doc:id="15b09e0f-8245-4923-953e-b48bc2aee14d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var c = vars.emailCtx default {}
+var flags = (c.flagBreakdown default []) map ("  " ++ ($.flag_code default "") ++ ": " ++ (($.count default 0) as String))
+var lines = [
+  "Run ID: " ++ (c.runId default ""),
+  "Report type: " ++ (c.reportType default ""),
+  "Entity: " ++ (c.entityCode default ""),
+  "Period: " ++ (c.periodDate default ""),
+  "Sequence: " ++ ((c.sequenceNumber default 1) as String) ++ (if (c.isRevision default false) "  (REVISION)" else ""),
+  "",
+  "REPORT CONTENTS",
+  "  Records: " ++ ((c.recordCount default 0) as String),
+  "  Total Amount: " ++ ((c.totalAmount default 0) as String),
+  "  Customers: " ++ ((c.customerCount default 0) as String),
+  (if (c.isNil default false) "  NIL REPORT - no flagged transactions in this period." else ""),
+  "",
+  "FLAG BREAKDOWN"
+] ++ (if (isEmpty(flags)) ["  (none)"] else flags) ++ [
+  "",
+  "FILE INTEGRITY",
+  "  File: " ++ (c.fileName default ""),
+  "  SHA-256: " ++ (c.checksum default ""),
+  "  Archive path: " ++ (c.archivePath default "")
+]
+---
+{
+  subject: (c.reportType default "") ++ " " ++ (c.runStatus default "") ++ " - " ++ (c.entityCode default "") ++ " " ++ (c.periodDate default ""),
+  body: lines joinBy "\n"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
