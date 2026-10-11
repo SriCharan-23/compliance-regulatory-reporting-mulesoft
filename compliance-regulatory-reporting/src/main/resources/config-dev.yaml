@@ -1,11 +1,18 @@
-  http:
-     port: "8081"
-  db:
-     host: "aws-0-ap-southeast-2.pooler.supabase.com"
-     port: "5432"
-     name: "postgres"
-     user: "postgres.cvewkbcshxpjgrobdixg"
-  report:
+http:
+  port: "8081"
+db:
+  host: "aws-0-ap-southeast-2.pooler.supabase.com"
+  port: "5432"
+  name: "postgres"
+  user: "postgres.cvewkbcshxpjgrobdixg"
+report:
   stagingDir: "C:/compliance-reports/staging"
   outputDir: "C:/compliance-reports/output"
   archiveDir: "C:/compliance-reports/archive"
+email:
+  host: "smtp.gmail.com"
+  port: "465"
+  user: "[sender mail]"
+  maxAttachmentBytes: "5000000"
+compliance:
+  distributionList: "[Receiver mail]"
