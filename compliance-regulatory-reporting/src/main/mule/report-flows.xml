@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="build-report-flow" doc:id="f71b83c6-6cec-456b-99c5-decfd281ca40" >
+		<ee:transform doc:name="Transform Message" doc:id="e1d3ea23-2652-4770-b31b-46059b0c7632" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::Crypto
+import toHex from dw::core::Binaries
+output text/plain
+
+var ctx = (vars.reportCtx default {}) as Object
+var rows = ((payload default []) as Array) orderBy ((r) -> (r.flagged_at default "") ++ "|" ++ (r.transaction_id default ""))
+
+fun clean(v) = do {
+    var s = ((v default "") as String) replace "|" with " "
+    ---
+    s replace /[\r\n]+/ with " "
+}
+fun ist(d: DateTime): String = (d >> "Asia/Kolkata") as String {format: "yyyy-MM-dd'T'HH:mm:ssxxx"}
+
+var periodEnd = (ctx.periodEnd default "1970-01-01T00:00:00Z") as DateTime
+var generatedAt = ist(periodEnd)
+var periodDate = (periodEnd >> "Asia/Kolkata") as String {format: "yyyy-MM-dd"}
+var seq = (ctx.sequence default 1) as Number as String {format: "000"}
+
+var header = ["H", clean(ctx.entityCode), clean(ctx.entityName), clean(ctx.reportType), periodDate, generatedAt, seq, clean(ctx.currency default "INR")] joinBy "|"
+
+var detailLines = rows map ((r, i) -> ([
+    "D", (i + 1) as String,
+    clean(r.transaction_id), clean(r.transaction_datetime), clean(r.account_number),
+    clean(r.customer_id), clean(r.customer_name), clean(r.customer_type),
+    clean(r.transaction_type), clean(r.channel), clean(r.currency),
+    ((r.amount default 0) as Number) as String {format: "0.00"},
+    clean(r.counterparty_name), clean(r.counterparty_country),
+    clean(r.flag_code), clean(r.flag_reason), clean(r.flagged_at),
+    clean(r.reviewed_by), clean(r.review_status)
+] joinBy "|"))
+
+var detailText = if (isEmpty(detailLines)) "" else (detailLines joinBy "\n") ++ "\n"
+var detailHash = lower(toHex(Crypto::hashWith(detailText as Binary {encoding: "UTF-8"}, "SHA-256")))
+var total = sum(rows map ((r) -> (r.amount default 0) as Number))
+var customers = sizeOf(rows distinctBy ((r) -> r.customer_id default ""))
+
+var trailer = ["T", sizeOf(rows) as String, total as String {format: "0.00"}, customers as String, generatedAt,
+               if (isEmpty(rows)) "NIL_REPORT" else detailHash] joinBy "|"
+---
+header ++ "\n" ++ detailText ++ trailer ++ "\n"]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="build-file-name-flow" doc:id="f686c491-e0d3-4ef9-a08d-2f5cf3669eae" >
+		<ee:transform doc:name="Transform Message" doc:id="38302807-bfdf-4bee-bc6c-0ba7fc2c0b43" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+var ctx = (vars.reportCtx default {}) as Object
+var periodEnd = (ctx.periodEnd default "1970-01-01T00:00:00Z") as DateTime
+var periodDate = (periodEnd >> "Asia/Kolkata") as String {format: "yyyyMMdd"}
+var seq = (ctx.sequence default 1) as Number as String {format: "000"}
+---
+(ctx.entityCode default "") ++ "_" ++ (ctx.reportType default "") ++ "_" ++ periodDate ++ "_" ++ seq ++ ".csv"]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="check-completeness-flow" doc:id="ca9358da-d53c-4b32-9716-e90184a40268" >
+		<ee:transform doc:name="Transform Message" doc:id="e13a9b20-4a8b-4b1c-b51a-2df2419f998d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var rows = ((payload default []) as Array)
+var s = ((vars.summary default {}) as Object)
+var extractedCount = sizeOf(rows)
+var extractedTotal = sum(rows map ((r) -> (r.amount default 0) as Number))
+var extractedCustomers = sizeOf(rows distinctBy ((r) -> r.customer_id default ""))
+var expectedCount = (s.record_count default 0) as Number
+var expectedTotal = (s.total_amount default 0) as Number
+var expectedCustomers = (s.customer_count default 0) as Number
+var isOk = extractedCount == expectedCount and extractedTotal == expectedTotal and extractedCustomers == expectedCustomers
+---
+{
+  ok: isOk,
+  extracted: { recordCount: extractedCount, totalAmount: extractedTotal, customerCount: extractedCustomers },
+  expected: { recordCount: expectedCount, totalAmount: expectedTotal, customerCount: expectedCustomers },
+  reason: if (isOk) null else "Completeness mismatch: extracted " ++ (extractedCount as String) ++ " records / " ++ (extractedTotal as String) ++ " vs expected " ++ (expectedCount as String) ++ " records / " ++ (expectedTotal as String)
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="build-summary-flow" doc:id="1646fb78-95cc-4499-ab2e-485f3ab63c2e" >
+		<ee:transform doc:name="Transform Message" doc:id="42fec1bf-9626-4616-9f74-26d64cd0405e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+var ctx = (vars.reportCtx default {}) as Object
+var rows = ((payload default []) as Array)
+fun ist(d: DateTime): String = (d >> "Asia/Kolkata") as String {format: "yyyy-MM-dd'T'HH:mm:ssxxx"}
+fun txt(v) = ((v default "") as String)
+fun money(n) = (n as Number) as String {format: "0.00"}
+var periodStart = ist((ctx.periodStart default "1970-01-01T00:00:00Z") as DateTime)
+var periodEnd = ist((ctx.periodEnd default "1970-01-01T00:00:00Z") as DateTime)
+var currency = txt(ctx.currency default "INR")
+var seq = (ctx.sequence default 1) as Number as String {format: "000"}
+var total = sum(rows map ((r) -> (r.amount default 0) as Number))
+var customers = sizeOf(rows distinctBy ((r) -> r.customer_id default ""))
+var outcome = if (vars.completeness.ok == true) "PASSED" else if (vars.completeness.ok == false) "FAILED" else "NOT CHECKED"
+var flags = ((rows groupBy ((r) -> r.flag_code default "UNKNOWN")) pluck ((items, code) -> {
+    code: code as String,
+    count: sizeOf(items),
+    amount: sum(items map ((i) -> (i.amount default 0) as Number))
+})) orderBy ((f) -> f.code)
+var flagLines = flags map ((f) -> "- " ++ f.code ++ ": " ++ (f.count as String) ++ " transaction(s), " ++ currency ++ " " ++ money(f.amount))
+---
+([
+  "REGULATORY REPORT SUMMARY",
+  "",
+  "Run ID: " ++ txt(ctx.runId),
+  "Report Type: " ++ txt(ctx.reportType),
+  "Reporting Entity: " ++ txt(ctx.entityName) ++ " (" ++ txt(ctx.entityCode) ++ ")",
+  "Reporting Period: " ++ periodStart ++ " to " ++ periodEnd,
+  "Sequence Number: " ++ seq ++ (if (ctx.isRevision == true) " (REVISION)" else ""),
+  "",
+  "Report Contents",
+  "- Flagged transactions reported: " ++ (sizeOf(rows) as String),
+  "- Total reported value: " ++ currency ++ " " ++ money(total),
+  "- Distinct customers: " ++ (customers as String),
+  "- Completeness check: " ++ outcome
+] ++ (if (isEmpty(rows)) [
+  "- This is a NIL report. No transactions met the reporting criteria for this period."
+] else []) ++ [
+  "",
+  "Flag Breakdown"
+] ++ (if (isEmpty(flagLines)) ["- none"] else flagLines)) joinBy "\n"]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

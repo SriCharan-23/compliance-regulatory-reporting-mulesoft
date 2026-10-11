@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="file-flows-test-suite.xml" />
+	<munit:test name="stage-submission-flow-test" description="Stages, validates and checksums a file">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="text/plain" value='#["H|E|N|STR|2026-09-11|2026-09-11T21:30:00+05:30|001|INR\nD|1|X\nT|1|1.00|1|2026-09-11T21:30:00+05:30|abc\n"]' />
+      <munit:variables>
+        <munit:variable key="fileName" mediaType="application/java" value='#["munit-test_STR_20260911_001.csv"]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="stage-submission-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="valid" expression="#[payload.ok]" is="#[MunitTools::equalTo(true)]"/>
+    <munit-tools:assert-that doc:name="checksum length" expression="#[sizeOf(payload.checksum)]" is="#[MunitTools::equalTo(64)]"/>
+  </munit:validation>
+</munit:test>
+
+</mule>

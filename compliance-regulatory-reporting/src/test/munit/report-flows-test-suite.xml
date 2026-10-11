@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="report-flows-test-suite.xml" />
+
+<munit:test name="build-report-flow-happy-path-test" description="3 rows produce H, 3 D and T with checksum">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="application/java" value='#[output application/java --- [
+        { transaction_id: "TXN-99120455", transaction_datetime: "2026-09-11T14:22:07+05:30", account_number: "00214578", customer_id: "CUST-77219", customer_name: "Meena Raghavan", customer_type: "INDIVIDUAL", transaction_type: "CARD_PAYMENT", channel: "ONLINE", currency: "INR", amount: 248500.00, counterparty_name: "Global Gadgets Online", counterparty_country: "SG", flag_code: "FLG-HIGH-VALUE", flag_reason: "Amount above reporting threshold", flagged_at: "2026-09-11T14:22:09+05:30", reviewed_by: "RISK_ANALYST_04", review_status: "CONFIRMED" },
+        { transaction_id: "TXN-99120781", transaction_datetime: "2026-09-11T16:40:55+05:30", account_number: "00219004", customer_id: "CUST-81140", customer_name: "Ganesh Iyer", customer_type: "INDIVIDUAL", transaction_type: "WIRE_TRANSFER", channel: "BRANCH", currency: "INR", amount: 1150000.00, counterparty_name: "Orient Trading FZE", counterparty_country: "AE", flag_code: "FLG-CROSS-BORDER", flag_reason: "Cross border transfer to monitored jurisdiction", flagged_at: "2026-09-11T16:41:02+05:30", reviewed_by: "RISK_ANALYST_02", review_status: "CONFIRMED" },
+        { transaction_id: "TXN-99121033", transaction_datetime: "2026-09-11T18:05:12+05:30", account_number: "00221876", customer_id: "CUST-66207", customer_name: "Sunrise Exports Pvt Ltd", customer_type: "CORPORATE", transaction_type: "CASH_DEPOSIT", channel: "BRANCH", currency: "INR", amount: 980000.00, counterparty_name: "Self", counterparty_country: "IN", flag_code: "FLG-STRUCTURING", flag_reason: "Multiple deposits below threshold within 24 hours", flagged_at: "2026-09-11T18:05:20+05:30", reviewed_by: "RISK_ANALYST_07", review_status: "CONFIRMED" }
+      ]]' />
+      <munit:variables>
+        <munit:variable key="reportCtx" mediaType="application/java" value='#[output application/java --- { entityCode: "ENT0091", entityName: "Bright Financial Services Ltd", reportType: "STR", periodEnd: "2026-09-11T16:00:00Z", sequence: 1, currency: "INR" }]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="build-report-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="Header line" expression='#[(payload splitBy "\n")[0]]' is='#[MunitTools::equalTo("H|ENT0091|Bright Financial Services Ltd|STR|2026-09-11|2026-09-11T21:30:00+05:30|001|INR")]'/>
+    <munit-tools:assert-that doc:name="First detail line" expression='#[(payload splitBy "\n")[1]]' is='#[MunitTools::startsWith("D|1|TXN-99120455|2026-09-11T14:22:07+05:30|00214578|CUST-77219|Meena Raghavan|INDIVIDUAL|CARD_PAYMENT|ONLINE|INR|248500.00|")]'/>
+    <munit-tools:assert-that doc:name="Trailer line" expression='#[(payload splitBy "\n")[4]]' is='#[MunitTools::equalTo("T|3|2378500.00|3|2026-09-11T21:30:00+05:30|c4bfc15c3ab878164832ed91882217c10546d798093c954028e242fc551e0b89")]'/>
+  </munit:validation>
+</munit:test>
+<munit:test name="build-report-flow-nil-report-test" description="Empty list produces H and NIL_REPORT trailer">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="application/java" value="#[output application/java --- []]" />
+      <munit:variables>
+        <munit:variable key="reportCtx" mediaType="application/java" value='#[output application/java --- { entityCode: "ENT0091", entityName: "Bright Financial Services Ltd", reportType: "STR", periodEnd: "2026-09-12T16:00:00Z", sequence: 1, currency: "INR" }]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="build-report-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="Header line" expression='#[(payload splitBy "\n")[0]]' is='#[MunitTools::equalTo("H|ENT0091|Bright Financial Services Ltd|STR|2026-09-12|2026-09-12T21:30:00+05:30|001|INR")]'/>
+    <munit-tools:assert-that doc:name="Nil trailer" expression='#[(payload splitBy "\n")[1]]' is='#[MunitTools::equalTo("T|0|0.00|0|2026-09-12T21:30:00+05:30|NIL_REPORT")]'/>
+  </munit:validation>
+</munit:test>
+	<munit:test name="report-flows-test-suite-build-file-name-flowTest" doc:id="b19c324c-c6c0-4823-ad1e-567f405600a7" description="Test">
+		<munit:behavior >
+			<munit:set-event doc:name="Set Event" doc:id="df5ea2cd-d125-4e2e-b701-2f46ec2fe862" >
+				<munit:payload value='#[output application/java --- "x"]' encoding="UTF-8" mediaType="application/java" />
+				<munit:variables >
+					<munit:variable key="reportCtx" value='#[output application/java --- { entityCode: "ENT0091", entityName: "x", reportType: "STR", periodEnd: "2026-09-11T16:00:00Z", sequence: 1 }]' mediaType="application/java" />
+				</munit:variables>
+			</munit:set-event>
+		</munit:behavior>
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to build-file-name-flow" doc:id="867ae221-7d77-4011-9230-03a2e67a928f" name="build-file-name-flow"/>
+		</munit:execution>
+		<munit:validation >
+			<munit-tools:assert-that doc:name="Assert that" doc:id="08b4cc3e-6294-4fc2-8532-7d6e028751b1" expression="#[payload]" is='#[MunitTools::equalTo("ENT0091_STR_20260911_001.csv")]'/>
+		</munit:validation>
+	</munit:test>
+	<munit:test name="check-completeness-match-test" description="Matching totals pass">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="application/java" value='#[output application/java --- [ { customer_id: "C1", amount: 100.00 }, { customer_id: "C2", amount: 50.50 } ]]' />
+      <munit:variables>
+        <munit:variable key="summary" mediaType="application/java" value='#[output application/java --- { record_count: 2, total_amount: 150.50, customer_count: 2 }]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="check-completeness-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="ok is true" expression="#[payload.ok]" is="#[MunitTools::equalTo(true)]"/>
+  </munit:validation>
+</munit:test>
+
+<munit:test name="check-completeness-mismatch-test" description="Different count fails">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="application/java" value='#[output application/java --- [ { customer_id: "C1", amount: 100.00 }, { customer_id: "C2", amount: 50.50 } ]]' />
+      <munit:variables>
+        <munit:variable key="summary" mediaType="application/java" value='#[output application/java --- { record_count: 3, total_amount: 150.50, customer_count: 2 }]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="check-completeness-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="ok is false" expression="#[payload.ok]" is="#[MunitTools::equalTo(false)]"/>
+    <munit-tools:assert-that doc:name="reason text" expression="#[payload.reason]" is='#[MunitTools::startsWith("Completeness mismatch")]'/>
+  </munit:validation>
+</munit:test>
+<munit:test name="build-summary-flow-test" description="Summary shows counts and flag breakdown">
+  <munit:behavior>
+    <munit:set-event doc:name="Set Event">
+      <munit:payload mediaType="application/java" value='#[output application/java --- [ { customer_id: "C1", amount: 100.00, flag_code: "FLG-A" }, { customer_id: "C2", amount: 50.50, flag_code: "FLG-B" } ]]' />
+      <munit:variables>
+        <munit:variable key="reportCtx" mediaType="application/java" value='#[output application/java --- { runId: "RUN-TEST1", entityCode: "ENT0091", entityName: "Bright Financial Services Ltd", reportType: "STR", periodStart: "2026-09-10T16:00:00Z", periodEnd: "2026-09-11T16:00:00Z", sequence: 1, currency: "INR", isRevision: false }]' />
+        <munit:variable key="completeness" mediaType="application/java" value='#[output application/java --- { ok: true }]' />
+      </munit:variables>
+    </munit:set-event>
+  </munit:behavior>
+  <munit:execution>
+    <flow-ref doc:name="Flow Reference" name="build-summary-flow"/>
+  </munit:execution>
+  <munit:validation>
+    <munit-tools:assert-that doc:name="count" expression="#[payload]" is='#[MunitTools::containsString("Flagged transactions reported: 2")]'/>
+    <munit-tools:assert-that doc:name="total" expression="#[payload]" is='#[MunitTools::containsString("Total reported value: INR 150.50")]'/>
+    <munit-tools:assert-that doc:name="flag line" expression="#[payload]" is='#[MunitTools::containsString("- FLG-A: 1 transaction(s), INR 100.00")]'/>
+    <munit-tools:assert-that doc:name="completeness" expression="#[payload]" is='#[MunitTools::containsString("Completeness check: PASSED")]'/>
+  </munit:validation>
+</munit:test>
+</mule>

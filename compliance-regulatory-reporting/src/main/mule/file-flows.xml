@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="86a772d9-bf06-413b-b4dd-e2cb850ade46" />
+	<flow name="stage-submission-flow" doc:id="fe6b4567-adee-4e17-8a68-8529a41b2e5a" >
+		<file:write doc:name="Write" doc:id="78e6927e-e50a-4ca5-82bd-806b89080fce" config-ref="File_Config" path="#[p('report.stagingDir') ++ '/' ++ (vars.fileName default &quot;&quot;)]"/>
+		<file:read doc:name="Read" doc:id="ddc0d422-d30f-4084-9a67-5af4836c94a6" config-ref="File_Config" path="#[p('report.stagingDir') ++ '/' ++ (vars.fileName default &quot;&quot;)]" outputMimeType="text/plain" outputEncoding='#["UTF-8"]'>
+			<non-repeatable-stream />
+		</file:read>
+		<ee:transform doc:name="Transform Message" doc:id="fb314e95-39ee-4f6d-8553-db4c72986ab9" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::Crypto
+import toHex from dw::core::Binaries
+output application/json
+var text = payload as String
+var lines = (text splitBy "\n") filter ((l) -> l != "")
+var dCount = sizeOf(lines filter ((l) -> (l startsWith "D|")))
+var declared = (((lines[-1] default "") splitBy "|")[1] default "-1") as Number
+---
+{
+  ok: ((lines[0] default "") startsWith "H|") and ((lines[-1] default "") startsWith "T|") and (dCount == declared),
+  recordLines: dCount,
+  checksum: lower(toHex(Crypto::hashWith(text as Binary {encoding: "UTF-8"}, "SHA-256")))
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="28c52a46-5a6a-4964-91d1-75b134a7ca4b" >
+			<when expression="#[payload.ok != true]">
+				<raise-error doc:name="Raise error" doc:id="91036851-232a-4bb1-a6bb-b979f7e55f0f" type="APP:FILE_VALIDATION_FAILED" description="Staged submission file failed validation"/>
+			</when>
+		</choice>
+		<set-variable value="#[payload.checksum]" doc:name="Set Variable" doc:id="97745238-5727-4274-8594-10ccaba24977" variableName="fileChecksum"/>
+	</flow>
+	<flow name="stage-summary-flow" doc:id="d26ecd55-c277-49bb-a9b9-e943fc5f29de" >
+		<file:write doc:name="Write" doc:id="fc504493-2905-4486-9b9e-1c8b5ce206cd" config-ref="File_Config" path="#[p('report.stagingDir') ++ '/' ++ (vars.summaryFileName default &quot;&quot;)]"/>
+	</flow>
+	<flow name="publish-report-flow" doc:id="6a44ec1d-4962-4cdd-a671-2ff3f842a598" >
+		<foreach doc:name="For Each" doc:id="fa476e0e-2369-4360-a2fc-9f7dc3a81e69" collection="#[vars.fileNames]">
+			<file:move doc:name="Move" doc:id="4eb11f12-3444-4be6-9869-92de0cc16ea4" sourcePath="#[p('report.stagingDir') ++ '/' ++ payload (payload is the current file name in the loop)]" targetPath="#[p('report.outputDir')]"/>
+		</foreach>
+		<ee:transform doc:name="Transform Message" doc:id="e85b0853-18ec-456f-b468-b1f0f38ace73" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  outputPath: p('report.outputDir') ++ "/" ++ (vars.fileNames[0] default ""),
+  archivePath: p('report.archiveDir') ++ "/" ++ (vars.fileNames[0] default "")
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="4c56e773-5e84-40eb-9bd6-51a779f1a84f" type="FILE:FILE_ALREADY_EXISTS">
+				<logger level="ERROR" doc:name="Logger" doc:id="cddb4fa3-b0fa-4fbe-bc83-6d50a2f2ae2d" message="Overwrite rejected: an existing report file was left untouched"/>
+				<raise-error doc:name="Raise error" doc:id="f4a43114-38d0-4ca7-b4f7-2b95960bfa2b" type="APP:ARCHIVE_OVERWRITE_REJECTED"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>
