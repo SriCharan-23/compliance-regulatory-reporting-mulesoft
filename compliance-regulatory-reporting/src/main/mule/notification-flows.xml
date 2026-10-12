@@ -46,6 +46,7 @@ http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/
 			</otherwise>
 		</choice>
 		<set-payload value="#[output application/json --- { method: vars.deliveryMethod }]" doc:name="Set Payload" doc:id="336b2c57-1bab-4f84-98cb-c0e76740712a" />
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="build-email-body-flow" doc:id="fa9ac023-2f70-4497-ad00-53a3c145581a" >
 		<ee:transform doc:name="Transform Message" doc:id="15b09e0f-8245-4923-953e-b48bc2aee14d" >
@@ -82,5 +83,6 @@ var lines = [
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 </mule>

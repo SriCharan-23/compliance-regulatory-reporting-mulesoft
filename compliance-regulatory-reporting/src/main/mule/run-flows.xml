@@ -44,6 +44,9 @@ output application/json
 payload[0]]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		
+    <error-handler ref="globalErrorHandler"/>
+		
 	</flow>
 	<flow name="finalize-run-flow" doc:id="5f105273-1173-4cbc-a7a4-b10cf227c65a" >
 		<http:listener doc:name="Listener" doc:id="ebceb0a9-ff33-4984-b3ce-d34398aca000" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/finalize" allowedMethods="POST"/>
@@ -100,6 +103,7 @@ output application/json
 payload[0]]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler"/>
 	</flow>
 	<flow name="fail-run-flow" doc:id="5c9b6e81-9f66-4949-b04f-26177a36a799" >
 		<http:listener doc:name="Listener" doc:id="e83312f6-524f-484d-b299-a96a2f6c6e56" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/fail" allowedMethods="POST"/>
@@ -122,6 +126,7 @@ output application/json
 { updated: payload.affectedRows > 0 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler"/>
 	</flow>
 	<flow name="update-notification-status-flow" doc:id="6837b634-10b8-4996-b096-780379ab8c42" >
 		<http:listener doc:name="Listener" doc:id="6fef07b8-6a66-4103-b008-c3f8d7203d7e" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/notification-status" allowedMethods="POST"/>
@@ -139,6 +144,7 @@ output application/json
 { updated: payload.affectedRows > 0 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler"/>
 	</flow>
 	<flow name="get-run-flow" doc:id="89c1c91f-03c2-4d4c-ae38-890b752fff09" >
 		<http:listener doc:name="Listener" doc:id="ae245409-cbfa-4ba1-a790-4d6019f587a8" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs/{runId}" allowedMethods="GET" responseStreamingMode="NEVER">
@@ -177,7 +183,8 @@ payload[0]]]></ee:set-payload>
         </ee:transform>
     </otherwise>
 </choice>
-	</flow>
+<error-handler ref="globalErrorHandler"/>
+</flow>
 	<flow name="list-runs-flow" doc:id="9e1cc2fb-beba-4b6a-ac0c-1ee35451d949" >
 		<http:listener doc:name="Listener" doc:id="158bccc9-2e7b-4868-892f-e5aae7ff53b7" config-ref="compliance-report-exp-api-httpListenerConfig" path="/runs" allowedMethods="GET" responseStreamingMode="NEVER"/>
 		<db:select doc:name="Select" doc:id="da13a4bf-9664-45eb-a38f-e2f4fb58d261" config-ref="Database_Config">
@@ -203,5 +210,7 @@ output application/json
 payload]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler"/>
 	</flow>
+	
 </mule>

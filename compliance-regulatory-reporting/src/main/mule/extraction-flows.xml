@@ -35,6 +35,7 @@ output application/json
 payload]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="get-transaction-summary-flow" doc:id="5c34d024-a384-4828-a08d-55b097b991be" >
 		<http:listener doc:name="Listener" doc:id="0b2b9cf3-17b9-420c-8b42-fcce445916f4" config-ref="compliance-report-exp-api-httpListenerConfig" path="/transactions/summary" allowedMethods="GET"/>
@@ -61,5 +62,6 @@ output application/json
 payload[0]]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 </mule>
