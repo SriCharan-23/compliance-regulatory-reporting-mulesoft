@@ -35,9 +35,11 @@ var declared = (((lines[-1] default "") splitBy "|")[1] default "-1") as Number
 			</when>
 		</choice>
 		<set-variable value="#[payload.checksum]" doc:name="Set Variable" doc:id="97745238-5727-4274-8594-10ccaba24977" variableName="fileChecksum"/>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="stage-summary-flow" doc:id="d26ecd55-c277-49bb-a9b9-e943fc5f29de" >
 		<file:write doc:name="Write" doc:id="fc504493-2905-4486-9b9e-1c8b5ce206cd" config-ref="File_Config" path="#[p('report.stagingDir') ++ '/' ++ (vars.summaryFileName default &quot;&quot;)]"/>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="publish-report-flow" doc:id="6a44ec1d-4962-4cdd-a671-2ff3f842a598" >
 		<foreach doc:name="For Each" doc:id="fa476e0e-2369-4360-a2fc-9f7dc3a81e69" collection="#[vars.fileNames]">
@@ -54,7 +56,7 @@ output application/json
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<error-handler >
+		<error-handler ref="globalErrorHandler">
 			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="4c56e773-5e84-40eb-9bd6-51a779f1a84f" type="FILE:FILE_ALREADY_EXISTS">
 				<logger level="ERROR" doc:name="Logger" doc:id="cddb4fa3-b0fa-4fbe-bc83-6d50a2f2ae2d" message="Overwrite rejected: an existing report file was left untouched"/>
 				<raise-error doc:name="Raise error" doc:id="f4a43114-38d0-4ca7-b4f7-2b95960bfa2b" type="APP:ARCHIVE_OVERWRITE_REJECTED"/>

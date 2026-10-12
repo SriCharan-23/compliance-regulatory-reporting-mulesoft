@@ -7,7 +7,6 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
 	<configuration-properties doc:name="Configuration properties" doc:id="8c922f51-e72b-48c0-a030-3a487f985048" file="config-dev.yaml" />
-	<configuration-properties doc:name="Configuration properties" doc:id="512e9f96-ea30-4567-ad81-16619e1b2708" file="config-local.yaml" />
 	<db:config name="Database_Config" doc:name="Database Config" doc:id="0f46b8b7-4d1f-4803-a1aa-7e05aa8df8ad" >
 		<db:generic-connection url="jdbc:postgresql://${db.host}:${db.port}/${db.name}?sslmode=require" driverClassName="org.postgresql.Driver" user="${db.user}" password="${db.password}" />
 	</db:config>
@@ -27,5 +26,6 @@ output application/json
 payload[0]]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 </mule>

@@ -13,7 +13,8 @@ import toHex from dw::core::Binaries
 output text/plain
 
 var ctx = (vars.reportCtx default {}) as Object
-var rows = ((payload default []) as Array) orderBy ((r) -> (r.flagged_at default "") ++ "|" ++ (r.transaction_id default ""))
+var rows = ((vars.rows default payload default []) as Array)
+    orderBy ((r) -> (r.flagged_at default "") ++ "|" ++ (r.transaction_id default ""))
 
 fun clean(v) = do {
     var s = ((v default "") as String) replace "|" with " "
@@ -51,6 +52,7 @@ var trailer = ["T", sizeOf(rows) as String, total as String {format: "0.00"}, cu
 header ++ "\n" ++ detailText ++ trailer ++ "\n"]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="build-file-name-flow" doc:id="f686c491-e0d3-4ef9-a08d-2f5cf3669eae" >
 		<ee:transform doc:name="Transform Message" doc:id="38302807-bfdf-4bee-bc6c-0ba7fc2c0b43" >
@@ -65,13 +67,14 @@ var seq = (ctx.sequence default 1) as Number as String {format: "000"}
 (ctx.entityCode default "") ++ "_" ++ (ctx.reportType default "") ++ "_" ++ periodDate ++ "_" ++ seq ++ ".csv"]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="check-completeness-flow" doc:id="ca9358da-d53c-4b32-9716-e90184a40268" >
 		<ee:transform doc:name="Transform Message" doc:id="e13a9b20-4a8b-4b1c-b51a-2df2419f998d" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
-var rows = ((payload default []) as Array)
+var rows = ((vars.rows default payload default []) as Array)
 var s = ((vars.summary default {}) as Object)
 var extractedCount = sizeOf(rows)
 var extractedTotal = sum(rows map ((r) -> (r.amount default 0) as Number))
@@ -89,6 +92,7 @@ var isOk = extractedCount == expectedCount and extractedTotal == expectedTotal a
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 	<flow name="build-summary-flow" doc:id="1646fb78-95cc-4499-ab2e-485f3ab63c2e" >
 		<ee:transform doc:name="Transform Message" doc:id="42fec1bf-9626-4616-9f74-26d64cd0405e" >
@@ -136,5 +140,6 @@ var flagLines = flags map ((f) -> "- " ++ f.code ++ ": " ++ (f.count as String) 
 ] ++ (if (isEmpty(flagLines)) ["- none"] else flagLines)) joinBy "\n"]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<error-handler ref="globalErrorHandler" />
 	</flow>
 </mule>

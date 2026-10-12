@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd ">
+<import file="global-error-handler.xml"/>
+<configuration
+    doc:name="Global Error Handler Configuration"
+    defaultErrorHandler-ref="globalErrorHandler"/>
+
     <http:listener-config name="compliance-report-exp-api-httpListenerConfig">
         <http:listener-connection host="0.0.0.0" port="8081" />
     </http:listener-config>
-    <apikit:config name="compliance-report-exp-api-config" api="resource::1db27135-89f9-4b13-900f-c9d4ae74e08b:compliance-report-exp-api:1.0.0:raml:zip:compliance-report-exp-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+   <apikit:config name="compliance-report-exp-api-config" api="resource::372e658f-eee1-441a-8b07-dcbdec71fdaa:compliance-reporting-api:1.0.0:raml:zip:compliance-reporting-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
     <flow name="compliance-report-exp-api-main">
         <http:listener config-ref="compliance-report-exp-api-httpListenerConfig" path="/api/*">
             <http:response statusCode="#[vars.httpStatus default 200]">
