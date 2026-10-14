@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="compliance-report-process-flow" doc:id="d809b824-dc37-49b7-8b8a-2015d809fef2" >
+		<scheduler doc:name="Scheduler" doc:id="d4d94cd6-46a0-4fbc-a2e7-34c0aaad2612" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="1" timeUnit="HOURS" />
+			</scheduling-strategy>
+		</scheduler>
+		<set-variable value="#[p('report.type')]" doc:name="Set Variable" doc:id="afd76ee3-e835-4748-8c34-05459e6e598a" variableName="reportType"/>
+		<flow-ref doc:name="Flow Reference" doc:id="e8d8653c-ba51-4d8c-8071-751d29bdc922" name="get-control-row-flow"/>
+		<ee:transform doc:name="build-claim-payload" doc:id="84b6c77d-ade5-47a1-a526-9c6d8617eacf" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var row = if (payload is Array) payload[0] else payload
+var cutoffToday = ((now() >> "Asia/Kolkata") as Date as String {format: "yyyy-MM-dd"} ++ "T21:30:00+05:30") as DateTime
+var start = row.last_reported_upto as DateTime
+var latestCutoff = if (now() < cutoffToday) (cutoffToday - |P1D|) else cutoffToday
+var nextEnd = start + |P1D|
+---
+{
+  reportType: row.report_type default p('report.type'),
+  entityCode: row.entity_code default p('report.entityCode'),
+  periodStart: start,
+  periodEnd: if (nextEnd < latestCutoff) nextEnd else latestCutoff,
+  triggeredBy: "SCHEDULER"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		   		<flow-ref doc:name="execute-report-run-flow" name="execute-report-run-flow"/>
+   	</flow>
+   	<flow name="execute-report-run-flow">
+		<set-variable value="#[payload.periodStart]" doc:name="Set Variable" doc:id="977d6570-1101-4df0-a708-8ea6c2e15b5c" variableName="periodStart"/>
+		<set-variable value="#[payload.periodEnd]" doc:name="Set Variable" doc:id="ff361632-d5f3-41f5-b1a5-67b3297034d4" variableName="periodEnd"/>
+		<flow-ref doc:name="Flow Reference" doc:id="60d4030b-d21c-4908-ac46-184d5b789ea3" name="claim-run-flow"/>
+		<set-variable value="#[payload.run_id]" doc:name="Set Variable" doc:id="4164f93a-01d8-4718-85ac-00721cf66014" variableName="runId"/>
+		<set-variable value="#[output application/java --- { runId: payload.run_id, reportType: p('report.type'), entityCode: p('report.entityCode'), entityName: p('report.entityName'), periodStart: vars.periodStart, periodEnd: vars.periodEnd, sequence: payload.sequence_number, isRevision: payload.is_revision, currency: &quot;INR&quot; }]" doc:name="Set Variable" doc:id="24e19bd5-da11-4368-8453-49bfbe95bc9b" variableName="reportCtx"/>
+		<flow-ref doc:name="Flow Reference" doc:id="f98a7be1-a947-49bf-b34b-8dc83e6cb05a" name="get-transaction-summary-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="121672df-75f2-4054-80dc-dd1bb98b4ee9" variableName="summary"/>
+		<flow-ref doc:name="Flow Reference" doc:id="3760d3fe-0dfc-499c-b43d-e4d53e24b287" name="get-flagged-transactions-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="ece8cf0d-eb7e-404d-9c98-1c34966c17b4" variableName="rows"/>
+		<flow-ref doc:name="Flow Reference" doc:id="ff377ece-71ad-4abf-97b7-bf170599e272" name="check-completeness-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="8d215751-069a-40bb-8ceb-4a43695884cf" variableName="completeness"/>
+		<choice doc:name="Choice" doc:id="3821613a-f3d2-4949-9b98-f6cf263bccfb" >
+			<when expression="#[not (vars.completeness.ok default true)]">
+				<raise-error doc:name="Raise error" doc:id="1f7361b1-b227-4744-a134-a4b307364f9f" type="APP:COMPLETENESS_FAILED" description='#[vars.completeness.reason default "Completeness check failed"]'/>
+			</when>
+		</choice>
+		<set-payload value="#[vars.rows]" doc:name="Set Payload" doc:id="67a480af-ac51-41b5-b2d1-d37518c7b342" />
+		<flow-ref doc:name="Flow Reference" doc:id="f7de5e90-aa24-4cb7-a410-9fb59840181a" name="build-file-name-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="cbac34f6-07cb-4a83-96fa-56d418ff1f27" variableName="fileName"/>
+		<set-variable value='#[vars.fileName replace ".csv" with "_summary.txt"]' doc:name="Set Variable" doc:id="41b4b371-7cf0-49b3-b99a-6f479ca1f54b" variableName="summaryFileName"/>
+		<set-payload value="#[vars.rows]" doc:name="Set Payload" doc:id="d1dfc165-63d4-4b0c-b12f-a61798511af0" />
+		<flow-ref doc:name="Flow Reference" doc:id="2f12133c-a4b6-4966-8c07-66f3f2d900f0" name="build-report-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="f7045e17-c309-4c5c-9df4-9072ff3070da" variableName="reportText"/>
+		<set-payload value="#[vars.rows]" doc:name="Set Payload" doc:id="2f9fa662-182f-4ddf-bb03-c1e4016e6661" />
+		<flow-ref doc:name="Flow Reference" doc:id="6afa868b-82f9-4eb3-9bdd-183d940613fb" name="build-summary-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="6f7f4692-b4cd-4eff-93e1-c47bf0c4f0df" variableName="summaryText"/>
+		<set-variable value="#[output application/java --- [vars.fileName, vars.summaryFileName]]" doc:name="Set Variable" doc:id="8cfa51b7-acbc-4fba-a8b9-5f19e97dd992" variableName="fileNames"/>
+		<set-payload value="#[vars.reportText]" doc:name="Set Payload" doc:id="393f8aa4-3c6b-47a8-9061-a2b8a7dd7677" />
+		<flow-ref doc:name="Flow Reference" doc:id="9faec46c-6f0b-40fd-84bd-eeaa4f88e3d1" name="stage-submission-flow"/>
+		<set-payload value="#[vars.summaryText]" doc:name="Set Payload" doc:id="493766a4-50ed-440d-bb17-78f6ed71db6f" />
+		<flow-ref doc:name="Flow Reference" doc:id="ab80860d-6956-4d59-9e8c-b86883a16689" name="stage-summary-flow"/>
+		<flow-ref doc:name="Flow Reference" doc:id="6e7df41a-5698-43a1-baad-8872210cb07e" name="publish-report-flow"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="fb9df069-892e-41e1-8d2c-548108b0ce1a" variableName="publishResult"/>
+		<logger level="INFO" doc:name="Logger" doc:id="ac6301b4-76d4-4e82-ab4a-378f2c3fa585" message='#["Published " ++ vars.publishResult.outputPath ++ " | checksum " ++ vars.fileChecksum]'/>
+		<ee:transform doc:name="build-email-logger" doc:id="4befd8b2-cebe-4359-b35f-4fe327df49ed" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var ctx = vars.reportCtx
+var rows = (vars.rows default []) as Array
+var s = vars.summary default {}
+---
+{
+  runId: ctx.runId,
+  reportType: ctx.reportType,
+  runStatus: "COMPLETED",
+  entityCode: ctx.entityCode,
+  periodDate: ((ctx.periodEnd as DateTime) >> "Asia/Kolkata") as String {format: "yyyy-MM-dd"},
+  sequenceNumber: ctx.sequence,
+  isRevision: ctx.isRevision,
+  recordCount: (s.record_count default 0) as Number,
+  totalAmount: (s.total_amount default 0) as Number,
+  customerCount: (s.customer_count default 0) as Number,
+  isNil: isEmpty(rows),
+  fileName: vars.fileName,
+  checksum: vars.fileChecksum,
+  archivePath: vars.publishResult.archivePath,
+  flagBreakdown: (rows groupBy ((r) -> r.flag_code default "UNKNOWN")) pluck ((items, code) -> { flag_code: code as String, count: sizeOf(items) })
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="9016801f-9c99-46ee-add8-e8fdaced7941" variableName="emailCtx"/>
+		<flow-ref doc:name="Flow Reference" doc:id="433bbf71-07e7-46cd-9c5b-a0e05cb41363" name="build-email-body-flow"/>
+		<set-variable value="#[payload.subject]" doc:name="Set Variable" doc:id="662a1987-2328-45fb-8cf5-d084cca99711" variableName="emailSubject"/>
+		<set-variable value="#[payload.body]" doc:name="Set Variable" doc:id="11df26ee-3921-48f1-b4c5-47e561ecc853" variableName="emailBody"/>
+		<flow-ref doc:name="Flow Reference" doc:id="adac75b2-1882-4f68-9457-ea92b2f0ed12" name="send-report-email-flow"/>
+		<set-payload value='#[output application/json --- { runId: vars.runId, status: "SENT" }]' doc:name="Set Payload" doc:id="39dac497-7391-4831-9c9f-c426bb0d2c9b" />
+		<flow-ref doc:name="Flow Reference" doc:id="cdf0dc62-cd5a-44ab-8d91-82ac598c2eef" name="update-notification-status-flow"/>
+		<set-payload value="#[output application/java ---&#10;{&#10;    runId: vars.runId,&#10;    reportType: vars.reportCtx.reportType,&#10;    periodStart: vars.reportCtx.periodStart,&#10;    periodEnd: vars.reportCtx.periodEnd,&#10;    sequenceNumber: vars.reportCtx.sequence,&#10;    recordCount: (vars.summary.record_count default 0) as Number,&#10;    totalAmount: (vars.summary.total_amount default 0) as Number,&#10;    customerCount: (vars.summary.customer_count default 0) as Number,&#10;    isNil: isEmpty(vars.rows),&#10;    outputPath: vars.publishResult.outputPath,&#10;    archivePath: vars.publishResult.archivePath,&#10;    checksum: vars.fileChecksum&#10;}]" doc:name="Set Payload" doc:id="8391757d-4c63-4d48-8c50-ba3758b3863f" />
+		<flow-ref doc:name="Flow Reference" doc:id="a40c2e75-db93-43d1-a161-7e25cd8ba1b4" name="finalize-run-flow"/>
+		<logger level="INFO" doc:name="Logger" doc:id="1b86d3c3-b99f-4537-bc67-8a1fb9cff70b" message='#["Run finalized: " ++ write(payload, "application/json")]'/>
+		<error-handler ref="globalErrorHandler" />
+	</flow>
+</mule>

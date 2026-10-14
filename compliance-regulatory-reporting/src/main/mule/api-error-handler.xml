@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <error-handler name="apiErrorHandler">
+        <on-error-propagate type="APIKIT:BAD_REQUEST, APP:BAD_REQUEST" doc:name="400">
+            <set-variable variableName="httpStatus" value="#[400]" doc:name="400"/>
+            <set-variable variableName="errorCode" value="APP:BAD_REQUEST" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+       <on-error-propagate type="APIKIT:NOT_FOUND" doc:name="404">
+            <set-variable variableName="httpStatus" value="#[404]" doc:name="404"/>
+            <set-variable variableName="errorCode" value="APP:NOT_FOUND" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+        <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED" doc:name="405">
+            <set-variable variableName="httpStatus" value="#[405]" doc:name="405"/>
+            <set-variable variableName="errorCode" value="APP:METHOD_NOT_ALLOWED" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+        <on-error-propagate type="APIKIT:NOT_ACCEPTABLE" doc:name="406">
+            <set-variable variableName="httpStatus" value="#[406]" doc:name="406"/>
+            <set-variable variableName="errorCode" value="APP:NOT_ACCEPTABLE" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+        <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE" doc:name="415">
+            <set-variable variableName="httpStatus" value="#[415]" doc:name="415"/>
+            <set-variable variableName="errorCode" value="APP:UNSUPPORTED_MEDIA_TYPE" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+        <on-error-propagate type="APP:PERIOD_CONFLICT" doc:name="409">
+            <set-variable variableName="httpStatus" value="#[409]" doc:name="409"/>
+            <set-variable variableName="errorCode" value="APP:PERIOD_CONFLICT" doc:name="errorCode"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+        <on-error-propagate type="ANY" doc:name="500">
+            <set-variable variableName="httpStatus" value="#[500]" doc:name="500"/>
+            <set-variable variableName="errorCode" value="APP:INTERNAL_ERROR" doc:name="errorCode"/>
+            <set-variable variableName="errorMessage" value="An unexpected error occurred while processing the request" doc:name="generic message"/>
+            <flow-ref name="build-error-response-flow" doc:name="build-error-response-flow"/>
+        </on-error-propagate>
+    </error-handler>
+
+    <flow name="build-error-response-flow">
+        <logger level="ERROR" doc:name="Log API error"
+            message="#[output text/plain --- 'API_ERROR status=' ++ ((vars.httpStatus default 500) as String) ++ ' code=' ++ (vars.errorCode default 'n/a') ++ ' correlationId=' ++ correlationId ++ ' detail=' ++ (error.description default '')]"/>
+        <ee:transform doc:name="Build error body">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  errorCode: vars.errorCode default "APP:INTERNAL_ERROR",
+  message: vars.errorMessage default (error.description default "An unexpected error occurred while processing the request"),
+  correlationId: correlationId
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+</mule>

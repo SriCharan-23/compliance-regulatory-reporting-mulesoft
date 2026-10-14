@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:email="http://www.mulesoft.org/schema/mule/email"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xsi:schemaLocation="
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
+
+    <!-- Central error handler: referenced by compliance-report-process-flow -->
+    <error-handler name="globalErrorHandler">
+        <on-error-propagate type="ANY" enableNotifications="true" logException="true"
+                            doc:name="On Error Propagate - ANY">
+            <flow-ref name="record-failure-flow" doc:name="record-failure-flow"/>
+        </on-error-propagate>
+    </error-handler>
+
+    <!-- Log, mark the run FAILED, raise the alert. Control timestamp is never touched here. -->
+       <flow name="record-failure-flow">
+        <set-variable variableName="failureReason" doc:name="failureReason"
+            value="#[output text/plain --- (error.errorType.namespace default 'APP') ++ ':' ++ (error.errorType.identifier default 'UNKNOWN') ++ ' - ' ++ (error.description default 'Unknown error')]"/>
+
+        <logger level="ERROR" doc:name="Log failure"
+            message="#[output text/plain --- 'RUN_FAILED runId=' ++ (vars.runId default 'n/a') ++ ' reportType=' ++ (vars.reportCtx.reportType default 'n/a') ++ ' periodStart=' ++ ((vars.reportCtx.periodStart default 'n/a') as String) ++ ' periodEnd=' ++ ((vars.reportCtx.periodEnd default 'n/a') as String) ++ ' error=' ++ vars.failureReason]"/>
+
+        <choice doc:name="Run claimed?">
+            <when expression="#[vars.runId != null]">
+                <try doc:name="Mark run FAILED">
+                    <set-payload doc:name="Build failure payload"
+                        value="#[output application/json --- { runId: vars.runId, failureReason: vars.failureReason }]"/>
+                    <flow-ref name="fail-run-flow" doc:name="fail-run-flow"/>
+                    <error-handler>
+                        <on-error-continue type="ANY" doc:name="Do not mask original error">
+                            <logger level="ERROR" doc:name="Could not mark FAILED"
+                                message="#[output text/plain --- 'Could not mark run ' ++ vars.runId ++ ' FAILED: ' ++ (error.description default 'unknown')]"/>
+                        </on-error-continue>
+                    </error-handler>
+                </try>
+                <logger level="ERROR" doc:name="Marked FAILED"
+                    message="#[output text/plain --- 'Run ' ++ vars.runId ++ ' marked FAILED']"/>
+            </when>
+            <otherwise>
+                <logger level="ERROR" doc:name="No run claimed"
+                    message="#[output text/plain --- 'Failure before a run was claimed: ' ++ vars.failureReason]"/>
+            </otherwise>
+        </choice>
+
+        <try doc:name="Send failure alert">
+            <email:send config-ref="Email_SMTP" doc:name="Send failure alert"
+                fromAddress="#[p('email.user')]"
+                toAddresses="#[(p('compliance.distributionList') splitBy ',') map trim($)]"
+                subject="#[output text/plain --- 'ALERT: ' ++ (vars.reportCtx.reportType default 'Compliance') ++ ' report run FAILED - ' ++ (vars.reportCtx.entityCode default '')]">
+                <email:body contentType="text/plain">
+                    <email:content><![CDATA[#[output text/plain --- "The scheduled regulatory report run did not complete.\n\nRun ID: " ++ (vars.runId default "not claimed") ++ "\nReport type: " ++ (vars.reportCtx.reportType default "n/a") ++ "\nPeriod: " ++ ((vars.reportCtx.periodStart default "n/a") as String) ++ " to " ++ ((vars.reportCtx.periodEnd default "n/a") as String) ++ "\nError: " ++ vars.failureReason ++ "\n\nNo report was issued for this period. The control timestamp was NOT advanced, so the period will be retried on the next run or by manual re-run."]]]></email:content>
+                </email:body>
+            </email:send>
+            <error-handler>
+                <on-error-continue type="ANY" doc:name="Alert failed">
+                    <logger level="ERROR" doc:name="Alert could not be sent"
+                        message="#[output text/plain --- 'Failure alert could not be sent: ' ++ (error.description default 'unknown')]"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+    </flow>
+
+</mule>

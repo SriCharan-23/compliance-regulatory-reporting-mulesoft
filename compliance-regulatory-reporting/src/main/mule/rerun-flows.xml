@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- Public entry used by POST /reports/rerun -->
+    <flow name="rerun-flow" doc:id="cc12f982-74dc-4f68-a02c-669bafe4e58e">
+        <flow-ref name="rerun-request-flow" doc:name="rerun-request-flow"/>
+        <flow-ref name="execute-report-run-flow" doc:name="execute-report-run-flow"/>
+        <set-variable variableName="httpStatus" value="#[202]" doc:name="httpStatus 202"/>
+        <ee:transform doc:name="Build response">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ runId: vars.runId, status: "COMPLETED" }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <!-- Validate the request and build the claim payload for the requested period -->
+    <flow name="rerun-request-flow">
+        <set-variable variableName="rerunRequest" value="#[payload]" doc:name="rerunRequest"/>
+        <logger level="INFO" doc:name="Log rerun request"
+            message="#[output text/plain --- 'Rerun requested periodDate=' ++ (payload.periodDate as String) ++ ' operator=' ++ (payload.operator default 'n/a') ++ ' reason=' ++ (payload.reason as String)]"/>
+        <set-variable variableName="reportType" value="#[p('report.type')]" doc:name="reportType"/>
+        <set-variable variableName="reportStatus" value="REPORTED" doc:name="reportStatus"/>
+        <flow-ref name="get-control-row-flow" doc:name="get-control-row-flow"/>
+        <ee:transform doc:name="build-rerun-claim-payload">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var req = vars.rerunRequest
+var periodEnd = ((req.periodDate as String) ++ "T21:30:00+05:30") as DateTime
+var reportedUpto = payload.last_reported_upto as DateTime
+---
+{
+  reportType: payload.report_type default p('report.type'),
+  entityCode: payload.entity_code default p('report.entityCode'),
+  periodStart: periodEnd - |P1D|,
+  periodEnd: periodEnd,
+  triggeredBy: "API",
+  alreadyReported: periodEnd <= reportedUpto
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <choice doc:name="Period already reported?">
+            <when expression="#[not (payload.alreadyReported default false)]">
+                <raise-error type="APP:BAD_REQUEST" doc:name="Raise BAD_REQUEST"
+                    description="periodDate must be a past business date that has already been reported. Use the scheduler for unreported periods."/>
+            </when>
+        </choice>
+        <set-variable variableName="claimPayload" value="#[payload]" doc:name="claimPayload"/>
+        <db:select doc:name="Check period in progress" config-ref="Database_Config">
+            <db:sql><![CDATA[SELECT count(*) AS in_progress
+FROM compliance_report_runs
+WHERE report_type = :reportType
+  AND entity_code = :entityCode
+  AND period_start = CAST(CAST(:periodStart AS text) AS timestamptz)
+  AND run_status = 'CLAIMED'
+  AND started_at > now() - interval '15 minutes']]></db:sql>
+            <db:input-parameters><![CDATA[#[{
+    reportType: vars.claimPayload.reportType,
+    entityCode: vars.claimPayload.entityCode,
+    periodStart: vars.claimPayload.periodStart
+}]]]></db:input-parameters>
+        </db:select>
+        <choice doc:name="Run in progress?">
+            <when expression="#[(payload[0].in_progress default 0) > 0]">
+                <raise-error type="APP:PERIOD_CONFLICT" doc:name="Raise PERIOD_CONFLICT"
+                    description="A run for this period is already in progress"/>
+            </when>
+        </choice>
+        <set-payload value="#[vars.claimPayload]" doc:name="Restore claim payload"/>
+    </flow>
+
+</mule>
